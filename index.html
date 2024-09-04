@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>File Upload and Chat</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background-color: #fed7aa;
+      }
+      .container {
+        max-width: 600px;
+        margin: auto;
+      }
+      .center {
+        text-align: center;
+      }
+      .file-upload {
+        margin-bottom: 20px;
+      }
+      .chat-section {
+        border: 1px solid #ccc;
+        background: #fff;
+        padding: 20px;
+        border-radius: 5px;
+        height: 300px;
+        overflow-y: auto;
+        width: 100%;
+      }
+      .chat-input {
+        margin-top: 10px;
+        width: 100%;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+      }
+      .chat-input input {
+        width: 100%;
+        padding: 10px;
+        border-radius: 50px;
+        outline: none;
+      }
+      #send-button, #file-input {
+        padding-left: 20px;
+        padding-right: 20px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        margin-left: 10px;
+        background-color: rgb(135, 135, 201);
+        font-weight: 600;
+        color: #fff;
+      }
+      .message {
+        margin: 10px 0;
+      }
+      .message.user {
+        text-align: right;
+        color: blue;
+      }
+      .message.bot {
+        text-align: left;
+        color: green;
+      }
+      #existing-file {
+        margin-top: 20px;
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="center">Chat With Your CSV</h1>
+      <div id="existing-file"></div>
+      <!-- File Upload Section -->
+      <div class="file-upload">
+        <label for="file-input">Upload a new CSV:</label>
+        <input
+          type="file"
+          id="file-input"
+          accept=".csv"
+          onchange="handleFileSelection()"
+        />
+        <button id="upload-button" onclick="uploadFile()" style="display: none">
+          Upload
+        </button>
+      </div>
+
+      <!-- Chat Section -->
+      <div class="chat-section" id="chat-section">
+        <!-- Chat messages will appear here -->
+      </div>
+
+      <!-- Chat Input -->
+      <div class="chat-input">
+        <input
+          type="text"
+          id="chat-input"
+          placeholder="Type your message..."
+          disabled
+        />
+        <div>
+          <button id="send-button" onclick="sendMessage()" disabled>Send</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const chatSection = document.getElementById("chat-section");
+      const uploadButton = document.getElementById("upload-button");
+      const chatInput = document.getElementById("chat-input");
+      const sendButton = document.getElementById("send-button");
+      const existing = document.getElementById("existing-file")
+      let chatMessages = []
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const cid = localStorage.getItem("cid")
+        if(cid) {
+          existing.innerText = `You're currently chatting with file CID: ${cid}`
+          chatInput.disabled = false;
+          sendButton.disabled = false;
+          loadChatMessages()
+        }
+      })
+
+      async function loadChatMessages() {
+        const fileCid = localStorage.getItem("cid")
+        let chatCid = null;
+        if(fileCid) {
+          chatCid = localStorage.getItem(fileCid)
+        }
+
+        if(chatCid) {
+          const response = await fetch(`/chat/${chatCid}`)
+          const messages = await response.json()
+          chatMessages = messages;
+        }
+      }
+
+      function handleFileSelection() {
+        const fileInput = document.getElementById("file-input");
+        if (fileInput.files.length > 0) {
+          uploadButton.style.display = "inline-block";
+        } else {
+          uploadButton.style.display = "none";
+        }
+      }
+
+      async function uploadFile() {
+        const fileInput = document.getElementById("file-input");
+        const file = fileInput.files[0];
+
+        if (!file) {
+          alert("No file selected!");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const response = await fetch("/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error("File upload failed!");
+          }
+
+          const result = await response.text();
+          console.log("File uploaded successfully: " + result);
+
+          localStorage.setItem("cid", result)
+          existing.innerText = ""
+
+          // Enable chat input and send button after upload completes
+          chatInput.disabled = false;
+          sendButton.disabled = false;
+
+          // Reset file input and upload button
+          fileInput.value = "";
+          uploadButton.style.display = "none";
+        } catch (error) {
+          console.log(error)
+          alert("Error uploading file: " + error.message);
+        }
+      }
+
+      async function sendMessage() {
+        const message = chatInput.value.trim();
+        const cid = localStorage.getItem("cid")
+        const messagesCid = localStorage.getItem(cid)
+        if (message) {
+          displayMessage(message, "user");
+          chatInput.value = "";
+          const cid = localStorage.getItem("cid")
+          const res = await fetch(`/chat/${cid}`, {
+            method: "POST", 
+            headers: {
+              'Content-Type': 'application/json'
+            }, 
+            body: JSON.stringify({
+              message, 
+              messagesCid
+            })
+          })
+
+          const json = await res.json()
+          localStorage.setItem(cid, json.messagesCid)
+          displayMessage(json.message, "bot")
+        }
+      }
+
+      function displayMessage(message, sender) {
+        const messageDiv = document.createElement("div");
+        messageDiv.classList.add("message", sender);
+        messageDiv.textContent = message;
+        chatSection.appendChild(messageDiv);
+        chatSection.scrollTop = chatSection.scrollHeight; // Scroll to the bottom
+      }
+    </script>
+  </body>
+</html>
